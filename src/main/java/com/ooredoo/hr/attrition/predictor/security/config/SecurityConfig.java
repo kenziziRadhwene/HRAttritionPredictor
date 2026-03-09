@@ -41,6 +41,10 @@ public class SecurityConfig {
                         .requestMatchers("/api/rh/**").hasRole("RESPONSABLE_RH")
                         // Endpoints Manager
                         .requestMatchers("/api/manager/**").hasRole("MANAGER")
+
+                        .requestMatchers("/api/employees/**").hasAnyRole("ADMIN", "RESPONSABLE_RH", "MANAGER")
+                        .requestMatchers("/api/scores/**").hasAnyRole("ADMIN", "RESPONSABLE_RH", "MANAGER")
+                        .requestMatchers("/api/alertes/**").hasAnyRole("ADMIN", "RESPONSABLE_RH")
                         // Tout le reste nécessite une authentification
                         .anyRequest().authenticated()
                 )
