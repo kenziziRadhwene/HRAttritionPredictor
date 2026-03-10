@@ -18,6 +18,11 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+
+import java.util.List;
 
 @Configuration
 @EnableWebSecurity
@@ -31,21 +36,19 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
+                // ─── CORS ───
+                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+                // ─── CSRF ───
                 .csrf(AbstractHttpConfigurer::disable)
+                // ─── Autorisation ───
                 .authorizeHttpRequests(auth -> auth
-                        // Endpoints publics
                         .requestMatchers("/api/auth/**").permitAll()
-                        // Endpoints Admin uniquement
                         .requestMatchers("/api/users/**").hasRole("ADMIN")
-                        // Endpoints RH
                         .requestMatchers("/api/rh/**").hasRole("RESPONSABLE_RH")
-                        // Endpoints Manager
                         .requestMatchers("/api/manager/**").hasRole("MANAGER")
-
                         .requestMatchers("/api/employees/**").hasAnyRole("ADMIN", "RESPONSABLE_RH", "MANAGER")
                         .requestMatchers("/api/scores/**").hasAnyRole("ADMIN", "RESPONSABLE_RH", "MANAGER")
                         .requestMatchers("/api/alertes/**").hasAnyRole("ADMIN", "RESPONSABLE_RH")
-                        // Tout le reste nécessite une authentification
                         .anyRequest().authenticated()
                 )
                 .sessionManagement(session -> session
@@ -55,6 +58,22 @@ public class SecurityConfig {
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
+    }
+
+    // ─────────────────────────────────────
+    // Configuration CORS
+    // ─────────────────────────────────────
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
+        CorsConfiguration config = new CorsConfiguration();
+        config.setAllowedOrigins(List.of("http://localhost:4200"));
+        config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        config.setAllowedHeaders(List.of("*"));
+        config.setAllowCredentials(true);
+
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", config);
+        return source;
     }
 
     @Bean
