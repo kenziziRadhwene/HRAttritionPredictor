@@ -84,4 +84,15 @@ public class EmployeeController {
                     .body("Erreur prédiction : " + e.getMessage());
         }
     }
+
+
+    // ─────────────────────────────────────
+// GET /api/employees/by-department/{department}
+// US8 — Employés par département (Manager)
+// ─────────────────────────────────────
+    @GetMapping("/by-department/{department}")
+    public ResponseEntity<List<EmployeeResponse>> getEmployeesByDepartment(
+            @PathVariable String department) {
+        return ResponseEntity.ok(employeeService.getEmployeesByDepartment(department));
+    }
 }

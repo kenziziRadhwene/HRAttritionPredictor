@@ -4,6 +4,7 @@ import com.ooredoo.hr.attrition.predictor.dto.request.EmployeeRequest;
 import com.ooredoo.hr.attrition.predictor.dto.response.EmployeeResponse;
 import com.ooredoo.hr.attrition.predictor.entity.Employee;
 import com.ooredoo.hr.attrition.predictor.entity.ScoreRisque;
+import com.ooredoo.hr.attrition.predictor.enums.EDepartment;
 import com.ooredoo.hr.attrition.predictor.repository.EmployeeRepository;
 import com.ooredoo.hr.attrition.predictor.repository.ScoreRisqueRepository;
 import lombok.RequiredArgsConstructor;
@@ -143,6 +144,21 @@ public class EmployeeService {
                 .orElseThrow(() -> new RuntimeException("Employé non trouvé avec l'ID : " + id));
         employee.setActive(false);
         employeeRepository.save(employee);
+    }
+
+    // ─────────────────────────────────────
+// US8 — Employés par département (Manager)
+// ─────────────────────────────────────
+    public List<EmployeeResponse> getEmployeesByDepartment(String department) {
+        try {
+            EDepartment dept = EDepartment.valueOf(department.toUpperCase());
+            return employeeRepository.findByActiveTrueAndDepartment(dept)
+                    .stream()
+                    .map(this::toResponse)
+                    .collect(Collectors.toList());
+        } catch (IllegalArgumentException e) {
+            throw new RuntimeException("Département invalide : " + department);
+        }
     }
 
     // ─────────────────────────────────────

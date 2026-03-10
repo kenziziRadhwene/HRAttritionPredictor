@@ -21,4 +21,13 @@ public class DashboardController {
     public ResponseEntity<DashboardStatsResponse> getStats() {
         return ResponseEntity.ok(dashboardService.getStats());
     }
+    // GET /api/dashboard/stats/filtered
+    @GetMapping("/stats/filtered")
+    public ResponseEntity<DashboardStatsResponse> getStatsFiltered(
+            @RequestParam(required = false) String departement,
+            @RequestParam(required = false) String niveauRisque) {
+        return ResponseEntity.ok(dashboardService.getStatsFiltered(departement, niveauRisque));
+    }
+
+
 }
