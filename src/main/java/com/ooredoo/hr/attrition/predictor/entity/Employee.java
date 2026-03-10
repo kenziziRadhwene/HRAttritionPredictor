@@ -1,5 +1,6 @@
 package com.ooredoo.hr.attrition.predictor.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.ooredoo.hr.attrition.predictor.enums.EDepartment;
 import com.ooredoo.hr.attrition.predictor.enums.EGender;
 import com.ooredoo.hr.attrition.predictor.enums.EJobRole;
@@ -8,6 +9,7 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 @Entity
@@ -161,7 +163,8 @@ public class Employee {
     @OneToMany(mappedBy = "employee",
             cascade = CascadeType.ALL,
             fetch = FetchType.LAZY)
-    private List<ScoreRisque> scoresRisque;
+    @JsonIgnoreProperties({"employee", "hibernateLazyInitializer"})
+    private List<ScoreRisque> scoresRisque = new ArrayList<>();
 
     // ─────────────────────────────────────
     // Lifecycle Hooks

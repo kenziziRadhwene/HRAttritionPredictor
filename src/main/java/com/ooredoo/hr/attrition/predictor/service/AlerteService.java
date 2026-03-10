@@ -7,9 +7,14 @@ import com.ooredoo.hr.attrition.predictor.entity.ScoreRisque;
 import com.ooredoo.hr.attrition.predictor.enums.EStatutAlerte;
 import com.ooredoo.hr.attrition.predictor.repository.AlerteRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestTemplate;
 
+import java.time.format.DateTimeFormatter;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
@@ -17,6 +22,9 @@ import java.util.stream.Collectors;
 public class AlerteService {
 
     private final AlerteRepository alerteRepository;
+
+    private static final String NOTIFICATION_URL =
+            "http://localhost:8082/api/notifications/alerte";
 
     // ─────────────────────────────────────
     // Créer une alerte automatiquement
@@ -46,13 +54,48 @@ public class AlerteService {
                 .message(message)
                 .probabilite(score.getProbabilite())
                 .statut(EStatutAlerte.NON_LUE)
-                .emailDestinataire("rh@ooredoo.tn")
+                .emailDestinataire("hr.attrition.ooredoo@gmail.com")
                 .emailEnvoye(false)
                 .employee(employee)
                 .scoreRisque(score)
                 .build();
 
-        return alerteRepository.save(alerte);
+        Alerte saved = alerteRepository.save(alerte);
+
+        // ─────────────────────────────────────
+        // Appel au microservice de notification
+        // ─────────────────────────────────────
+        try {
+            Map<String, Object> mailRequest = new HashMap<>();
+            mailRequest.put("employeeId",          employee.getId());
+            mailRequest.put("employeeNom",         employee.getFirstName() + " " + employee.getLastName());
+            mailRequest.put("employeeMatricule",   employee.getMatricule());
+            mailRequest.put("employeeDepartement", employee.getDepartment().name());
+            mailRequest.put("employeePoste",       employee.getJobRole().name());
+            mailRequest.put("employeeAnciennete",  employee.getYearsAtCompany());
+            mailRequest.put("probabilite",         score.getProbabilite());
+            mailRequest.put("niveauRisque",        score.getNiveauRisque().name());
+            mailRequest.put("seuilUtilise",        score.getSeuilUtilise());
+            mailRequest.put("dateCalcul",          score.getDateCalcul()
+                    .format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm")));
+            mailRequest.put("modelVersion",        score.getModelVersion());
+            mailRequest.put("emailDestinataire",   "hr.attrition.ooredoo@gmail.com");
+
+            RestTemplate restTemplate = new RestTemplate();
+            ResponseEntity<Map> response = restTemplate.postForEntity(
+                    NOTIFICATION_URL, mailRequest, Map.class);
+
+            if (response.getStatusCode().is2xxSuccessful()) {
+                saved.setEmailEnvoye(true);
+                alerteRepository.save(saved);
+                System.out.println("✅ Notification envoyée au microservice");
+            }
+
+        } catch (Exception e) {
+            System.err.println("❌ Erreur notification : " + e.getMessage());
+        }
+
+        return saved;
     }
 
     // ─────────────────────────────────────

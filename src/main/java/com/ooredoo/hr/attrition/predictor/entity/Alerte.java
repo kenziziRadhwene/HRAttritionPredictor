@@ -1,5 +1,6 @@
 package com.ooredoo.hr.attrition.predictor.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.ooredoo.hr.attrition.predictor.enums.EStatutAlerte;
 import jakarta.persistence.*;
 import lombok.*;
@@ -60,10 +61,12 @@ public class Alerte {
     // ─────────────────────────────────────
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "employee_id", nullable = false)
+    @JsonIgnoreProperties({"scoresRisque", "alertes", "hibernateLazyInitializer"})
     private Employee employee;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "score_risque_id", nullable = false)
+    @JsonIgnoreProperties({"employee", "hibernateLazyInitializer"})
     private ScoreRisque scoreRisque;
 
     // ─────────────────────────────────────

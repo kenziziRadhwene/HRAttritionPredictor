@@ -1,5 +1,6 @@
 package com.ooredoo.hr.attrition.predictor.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.ooredoo.hr.attrition.predictor.enums.ENiveauRisque;
 import jakarta.persistence.*;
 import lombok.*;
@@ -57,6 +58,7 @@ public class ScoreRisque {
     // ─────────────────────────────────────
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "employee_id", nullable = false)
+    @JsonIgnoreProperties({"scoresRisque", "hibernateLazyInitializer"})
     private Employee employee;
 
     // ─────────────────────────────────────
