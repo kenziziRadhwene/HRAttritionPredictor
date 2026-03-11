@@ -2,6 +2,7 @@ package com.ooredoo.hr.attrition.predictor.controller;
 
 import com.ooredoo.hr.attrition.predictor.dto.request.RegisterRequest;
 import com.ooredoo.hr.attrition.predictor.dto.request.UpdateProfileRequest;
+import com.ooredoo.hr.attrition.predictor.dto.request.UpdateUserRequest;
 import com.ooredoo.hr.attrition.predictor.dto.response.UserResponse;
 import com.ooredoo.hr.attrition.predictor.service.UserService;
 import jakarta.validation.Valid;
@@ -56,5 +57,15 @@ public class UserController {
             @PathVariable Long id,
             @Valid @RequestBody UpdateProfileRequest request) {
         return ResponseEntity.ok(userService.updateProfile(id, request));
+    }
+
+    // US4 — Modifier un utilisateur (ADMIN uniquement)
+
+    @PutMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<UserResponse> updateUser(
+            @PathVariable Long id,
+            @Valid @RequestBody UpdateUserRequest request) {
+        return ResponseEntity.ok(userService.updateUser(id, request));
     }
 }

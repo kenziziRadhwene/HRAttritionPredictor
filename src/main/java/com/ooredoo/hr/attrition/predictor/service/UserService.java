@@ -2,6 +2,7 @@ package com.ooredoo.hr.attrition.predictor.service;
 
 import com.ooredoo.hr.attrition.predictor.dto.request.RegisterRequest;
 import com.ooredoo.hr.attrition.predictor.dto.request.UpdateProfileRequest;
+import com.ooredoo.hr.attrition.predictor.dto.request.UpdateUserRequest;
 import com.ooredoo.hr.attrition.predictor.dto.response.UserResponse;
 import com.ooredoo.hr.attrition.predictor.entity.User;
 import com.ooredoo.hr.attrition.predictor.repository.UserRepository;
@@ -57,6 +58,27 @@ public class UserService {
             throw new RuntimeException("Utilisateur non trouvé avec l'id : " + id);
         }
         userRepository.deleteById(id);
+    }
+
+
+    // US4 — Modifier un utilisateur (ADMIN)
+
+
+    public UserResponse updateUser(Long id, UpdateUserRequest request) {
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Utilisateur non trouvé avec l'id : " + id));
+
+        user.setNom(request.getNom());
+        user.setPrenom(request.getPrenom());
+        user.setEmail(request.getEmail());
+        user.setUserRole(request.getUserRole());
+
+        if (request.getMotDePasse() != null && !request.getMotDePasse().isEmpty()) {
+            user.setMotDePasse(passwordEncoder.encode(request.getMotDePasse()));
+        }
+
+        User updated = userRepository.save(user);
+        return mapToResponse(updated);
     }
 
     // US5 — Modifier son propre profil
