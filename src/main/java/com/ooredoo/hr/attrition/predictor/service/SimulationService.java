@@ -334,19 +334,31 @@ public class SimulationService {
 
         Double probabiliteActuelle = scoreActuel.getProbabilite();
 
-        // 3. Simulation salaire +20%
-        SimulationSalaireRequest salaireReq = new SimulationSalaireRequest();
-        salaireReq.setEmployeeId(employeeId);
-        salaireReq.setPourcentageAugmentation(20.0);
-        SimulationResponse simSalaire = simulerAugmentationSalaire(salaireReq);
+        // 3. Simulation salaire +10%
+        SimulationSalaireRequest salaireReq10 = new SimulationSalaireRequest();
+        salaireReq10.setEmployeeId(employeeId);
+        salaireReq10.setPourcentageAugmentation(10.0);
+        SimulationResponse simSalaire10 = simulerAugmentationSalaire(salaireReq10);
 
-        // 4. Simulation formation +3
+        // 4. Simulation salaire +20%
+        SimulationSalaireRequest salaireReq20 = new SimulationSalaireRequest();
+        salaireReq20.setEmployeeId(employeeId);
+        salaireReq20.setPourcentageAugmentation(20.0);
+        SimulationResponse simSalaire20 = simulerAugmentationSalaire(salaireReq20);
+
+        // 5. Simulation salaire +30%
+        SimulationSalaireRequest salaireReq30 = new SimulationSalaireRequest();
+        salaireReq30.setEmployeeId(employeeId);
+        salaireReq30.setPourcentageAugmentation(30.0);
+        SimulationResponse simSalaire30 = simulerAugmentationSalaire(salaireReq30);
+
+        // 6. Simulation formation +3
         SimulationFormationRequest formationReq = new SimulationFormationRequest();
         formationReq.setEmployeeId(employeeId);
         formationReq.setNombreFormations(3);
         SimulationResponse simFormation = simulerFormation(formationReq);
 
-        // 5. Simulation poste — meilleur poste disponible
+        // 7. Simulation poste — niveau +1
         SimulationPosteRequest posteReq = new SimulationPosteRequest();
         posteReq.setEmployeeId(employeeId);
         posteReq.setNouveauPoste(employee.getJobRole());
@@ -354,23 +366,23 @@ public class SimulationService {
         posteReq.setNouveauJobLevel(employee.getJobLevel() + 1);
         SimulationResponse simPoste = simulerChangementPoste(posteReq);
 
-        // 6. Trouver la meilleure simulation
-        SimulationResponse meilleure = simSalaire;
-        if (simFormation.getImpactPourcentage() > meilleure.getImpactPourcentage()) {
-            meilleure = simFormation;
-        }
-        if (simPoste.getImpactPourcentage() > meilleure.getImpactPourcentage()) {
-            meilleure = simPoste;
-        }
+        // 8. Trouver la meilleure simulation parmi les 5
+        SimulationResponse meilleure = simSalaire10;
+        if (simSalaire20.getImpactPourcentage() > meilleure.getImpactPourcentage()) meilleure = simSalaire20;
+        if (simSalaire30.getImpactPourcentage() > meilleure.getImpactPourcentage()) meilleure = simSalaire30;
+        if (simFormation.getImpactPourcentage()  > meilleure.getImpactPourcentage()) meilleure = simFormation;
+        if (simPoste.getImpactPourcentage()      > meilleure.getImpactPourcentage()) meilleure = simPoste;
 
-        // 7. Construire la réponse
+        // 9. Construire la réponse
         return ComparaisonSimulationResponse.builder()
                 .employeeId(employee.getId())
                 .employeeNom(employee.getFirstName() + " " + employee.getLastName())
                 .employeeMatricule(employee.getMatricule())
                 .probabiliteActuelle(probabiliteActuelle)
                 .niveauRisqueActuel(calculerNiveau(probabiliteActuelle).name())
-                .simulationSalaire(simSalaire)
+                .simulationSalaire10(simSalaire10)
+                .simulationSalaire20(simSalaire20)
+                .simulationSalaire30(simSalaire30)
                 .simulationPoste(simPoste)
                 .simulationFormation(simFormation)
                 .meilleureAction(meilleure.getRecommandation())

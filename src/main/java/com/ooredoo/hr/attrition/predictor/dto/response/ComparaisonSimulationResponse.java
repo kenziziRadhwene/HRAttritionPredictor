@@ -12,8 +12,10 @@ public class ComparaisonSimulationResponse {
     private Double probabiliteActuelle;
     private String niveauRisqueActuel;
 
-    // Les 3 simulations
-    private SimulationResponse simulationSalaire;
+    // Les 5 simulations
+    private SimulationResponse simulationSalaire10;
+    private SimulationResponse simulationSalaire20;
+    private SimulationResponse simulationSalaire30;
     private SimulationResponse simulationPoste;
     private SimulationResponse simulationFormation;
 
