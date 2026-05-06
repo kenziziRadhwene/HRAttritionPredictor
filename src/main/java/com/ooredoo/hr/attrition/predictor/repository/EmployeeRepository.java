@@ -18,4 +18,5 @@ public interface EmployeeRepository extends JpaRepository<Employee, Long> {
     boolean existsByEmail(String email);
     boolean existsByMatricule(String matricule);
     List<Employee> findByActiveTrueAndDepartment(EDepartment department);
+    List<Employee> findByDepartmentAndActiveTrue(String department);
 }

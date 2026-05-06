@@ -6,6 +6,7 @@ import com.ooredoo.hr.attrition.predictor.entity.Employee;
 import com.ooredoo.hr.attrition.predictor.entity.ScoreRisque;
 import com.ooredoo.hr.attrition.predictor.enums.EStatutAlerte;
 import com.ooredoo.hr.attrition.predictor.repository.AlerteRepository;
+import com.ooredoo.hr.attrition.predictor.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
@@ -22,9 +23,26 @@ import java.util.stream.Collectors;
 public class AlerteService {
 
     private final AlerteRepository alerteRepository;
+    private final UserRepository userRepository;  // ⭐ AJOUTÉ
 
     private static final String NOTIFICATION_URL =
             "http://localhost:8082/api/notifications/alerte";
+
+    /**
+     * Récupère la liste des emails de tous les responsables RH
+     */
+    private String getResponsablesRHEmails() {
+        List<String> emails = userRepository.findAllResponsableRHEmails();
+
+        if (emails == null || emails.isEmpty()) {
+            System.out.println("⚠️ Aucun RH trouvé, utilisation du fallback");
+            return "hr.attrition.ooredoo@gmail.com";
+        }
+
+        String result = String.join(",", emails);
+        System.out.println("📧 Emails des RH destinataires : " + result);
+        return result;
+    }
 
     // ─────────────────────────────────────
     // Créer une alerte automatiquement
@@ -49,12 +67,15 @@ public class AlerteService {
                 score.getProbabilite() * 100
         );
 
+        // ⭐ Récupérer tous les emails des responsables RH
+        String destinataires = getResponsablesRHEmails();
+
         Alerte alerte = Alerte.builder()
                 .titre(titre)
                 .message(message)
                 .probabilite(score.getProbabilite())
                 .statut(EStatutAlerte.NON_LUE)
-                .emailDestinataire("hr.attrition.ooredoo@gmail.com")
+                .emailDestinataire(destinataires)  // ⭐ MODIFIÉ
                 .emailEnvoye(false)
                 .employee(employee)
                 .scoreRisque(score)
@@ -79,7 +100,7 @@ public class AlerteService {
             mailRequest.put("dateCalcul",          score.getDateCalcul()
                     .format(DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm")));
             mailRequest.put("modelVersion",        score.getModelVersion());
-            mailRequest.put("emailDestinataire",   "hr.attrition.ooredoo@gmail.com");
+            mailRequest.put("emailDestinataire",   destinataires);  // ⭐ MODIFIÉ
 
             RestTemplate restTemplate = new RestTemplate();
             ResponseEntity<Map> response = restTemplate.postForEntity(
@@ -88,7 +109,7 @@ public class AlerteService {
             if (response.getStatusCode().is2xxSuccessful()) {
                 saved.setEmailEnvoye(true);
                 alerteRepository.save(saved);
-                System.out.println("✅ Notification envoyée au microservice");
+                System.out.println("✅ Notification envoyée aux RH : " + destinataires);
             }
 
         } catch (Exception e) {
