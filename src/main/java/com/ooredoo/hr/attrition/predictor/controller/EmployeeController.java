@@ -10,6 +10,11 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+
+import com.ooredoo.hr.attrition.predictor.dto.response.ImportResultResponse;
+import com.ooredoo.hr.attrition.predictor.service.CsvImportService;
+import org.springframework.web.multipart.MultipartFile;
+
 import java.util.List;
 
 @RestController
@@ -19,6 +24,7 @@ public class EmployeeController {
 
     private final EmployeeService employeeService;
     private final MLService mlService;
+    private final CsvImportService csvImportService;
 
     // ─────────────────────────────────────
     // POST /api/employees
@@ -94,5 +100,21 @@ public class EmployeeController {
     public ResponseEntity<List<EmployeeResponse>> getEmployeesByDepartment(
             @PathVariable String department) {
         return ResponseEntity.ok(employeeService.getEmployeesByDepartment(department));
+    }
+
+
+
+    // ─────────────────────────────────────
+// POST /api/employees/import
+// US6 — Import CSV employés
+// ─────────────────────────────────────
+    @PostMapping("/import")
+    public ResponseEntity<ImportResultResponse> importCsv(
+            @RequestParam("file") MultipartFile file) {
+        if (file.isEmpty()) {
+            return ResponseEntity.badRequest().build();
+        }
+        ImportResultResponse result = csvImportService.importEmployees(file);
+        return ResponseEntity.ok(result);
     }
 }

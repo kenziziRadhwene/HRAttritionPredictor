@@ -2,6 +2,8 @@ package com.ooredoo.hr.attrition.predictor.service;
 
 import com.ooredoo.hr.attrition.predictor.dto.request.LoginRequest;
 import com.ooredoo.hr.attrition.predictor.dto.response.AuthResponse;
+import com.ooredoo.hr.attrition.predictor.entity.User;
+import com.ooredoo.hr.attrition.predictor.repository.UserRepository;
 import com.ooredoo.hr.attrition.predictor.security.jwt.JwtUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -16,10 +18,10 @@ public class AuthService {
 
     private final AuthenticationManager authenticationManager;
     private final JwtUtil jwtUtil;
+    private final UserRepository userRepository; // ← AJOUTER
 
     public AuthResponse login(LoginRequest request) {
 
-        // Authentifier l'utilisateur via Spring Security
         Authentication authentication = authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(
                         request.getEmail(),
@@ -27,17 +29,19 @@ public class AuthService {
                 )
         );
 
-        // Récupérer les détails de l'utilisateur authentifié
         UserDetails userDetails = (UserDetails) authentication.getPrincipal();
 
-        // Générer le token JWT
+        // Récupérer l'entité User pour avoir le département
+        User user = userRepository.findByEmail(userDetails.getUsername())
+                .orElseThrow(() -> new RuntimeException("Utilisateur non trouvé"));
+
         String token = jwtUtil.generateToken(userDetails);
 
         return AuthResponse.builder()
                 .token(token)
                 .email(userDetails.getUsername())
-                .role(userDetails.getAuthorities()
-                        .iterator().next().getAuthority())
+                .role(userDetails.getAuthorities().iterator().next().getAuthority())
+                .departement(user.getDepartement()) // ← AJOUTER
                 .build();
     }
 }

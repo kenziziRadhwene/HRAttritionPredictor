@@ -17,4 +17,5 @@ public class UserResponse {
     private String prenom;
     private String email;
     private ERole userRole;
+    private String departement;
 }

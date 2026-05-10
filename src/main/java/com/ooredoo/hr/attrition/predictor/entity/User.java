@@ -34,5 +34,8 @@ public class User {
     @Column(nullable = false)
     private ERole userRole;
 
+    @Column
+    private String departement; // null pour ADMIN et RESPONSABLE_RH
+
 
 }

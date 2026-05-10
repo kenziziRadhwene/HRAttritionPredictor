@@ -24,4 +24,6 @@ public class UpdateUserRequest {
 
     @NotNull(message = "Le rôle est obligatoire")
     private ERole userRole;
+
+    private String departement;
 }

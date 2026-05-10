@@ -26,4 +26,6 @@ public class RegisterRequest {
 
     @NotNull(message = "Le rôle est obligatoire")
     private ERole userRole;
+
+    private String departement; // optionnel, requis uniquement si MANAGER
 }

@@ -31,6 +31,7 @@ public class UserService {
                 .email(request.getEmail())
                 .motDePasse(passwordEncoder.encode(request.getMotDePasse()))
                 .userRole(request.getUserRole())
+                .departement(request.getDepartement()) // ← AJOUTER
                 .build();
 
         User saved = userRepository.save(user);
@@ -72,6 +73,7 @@ public class UserService {
         user.setPrenom(request.getPrenom());
         user.setEmail(request.getEmail());
         user.setUserRole(request.getUserRole());
+        user.setDepartement(request.getDepartement());// ← AJOUTER
 
         if (request.getMotDePasse() != null && !request.getMotDePasse().isEmpty()) {
             user.setMotDePasse(passwordEncoder.encode(request.getMotDePasse()));
@@ -102,6 +104,7 @@ public class UserService {
                 .prenom(user.getPrenom())
                 .email(user.getEmail())
                 .userRole(user.getUserRole())
+                .departement(user.getDepartement())
                 .build();
     }
 }

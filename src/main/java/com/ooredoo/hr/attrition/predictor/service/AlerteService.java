@@ -44,6 +44,15 @@ public class AlerteService {
         return result;
     }
 
+
+    /**
+     * Récupère l'email du manager du département de l'employé
+     */
+    private String getManagerEmail(String departement) {
+        return userRepository.findManagerEmailByDepartement(departement)
+                .orElse(null);
+    }
+
     // ─────────────────────────────────────
     // Créer une alerte automatiquement
     // ─────────────────────────────────────
@@ -67,8 +76,25 @@ public class AlerteService {
                 score.getProbabilite() * 100
         );
 
-        // ⭐ Récupérer tous les emails des responsables RH
-        String destinataires = getResponsablesRHEmails();
+// ⭐ Récupérer tous les emails des responsables RH
+        String rhEmails = getResponsablesRHEmails();
+
+// ⭐ Récupérer l'email du manager du département de l'employé
+        String managerEmail = getManagerEmail(employee.getDepartment().name());
+
+// ⭐ Fusionner les deux listes sans doublon
+        String destinataires;
+        if (managerEmail != null && !managerEmail.isBlank()) {
+            List<String> tous = new java.util.ArrayList<>(List.of(rhEmails.split(",")));
+            if (!tous.contains(managerEmail)) {
+                tous.add(managerEmail);
+            }
+            destinataires = String.join(",", tous);
+            System.out.println("📧 Destinataires (RH + Manager) : " + destinataires);
+        } else {
+            destinataires = rhEmails;
+            System.out.println("📧 Destinataires (RH uniquement) : " + destinataires);
+        }
 
         Alerte alerte = Alerte.builder()
                 .titre(titre)
