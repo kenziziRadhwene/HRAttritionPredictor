@@ -41,4 +41,26 @@ public class EmployeeResponse {
     private Double derniereProbabilite;
     private String dernierNiveauRisque;
     private LocalDateTime derniereDateCalcul;
+
+    // Informations personnelles manquantes
+    private String educationField;
+    private Integer education;
+
+    // Informations professionnelles manquantes
+    private Integer yearsInCurrentRole;
+    private Integer yearsWithCurrManager;
+    private Integer trainingTimesLastYear;
+    private Integer numCompaniesWorked;
+    private Integer totalWorkingYears;
+
+    // Rémunération manquante
+    private Integer dailyRate;
+    private Integer hourlyRate;
+    private Integer monthlyRate;
+    private Integer percentSalaryHike;
+
+    // Satisfaction manquante
+    private Integer relationshipSatisfaction;
+    private Integer jobInvolvement;
+    private Integer performanceRating;
 }
