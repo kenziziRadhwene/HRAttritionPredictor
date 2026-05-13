@@ -1,6 +1,7 @@
 package com.ooredoo.hr.attrition.predictor.repository;
 
 import com.ooredoo.hr.attrition.predictor.entity.User;
+import com.ooredoo.hr.attrition.predictor.enums.ERole;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -20,4 +21,6 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     @Query("SELECT u.email FROM User u WHERE u.userRole = 'MANAGER' AND u.departement = :departement")
     Optional<String> findManagerEmailByDepartement(@Param("departement") String departement);
+
+ 
 }

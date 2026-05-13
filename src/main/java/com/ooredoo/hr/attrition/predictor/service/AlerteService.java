@@ -76,6 +76,8 @@ public class AlerteService {
                 score.getProbabilite() * 100
         );
 
+        /*
+
 // ⭐ Récupérer tous les emails des responsables RH
         String rhEmails = getResponsablesRHEmails();
 
@@ -96,19 +98,22 @@ public class AlerteService {
             System.out.println("📧 Destinataires (RH uniquement) : " + destinataires);
         }
 
+
+        */
+
         Alerte alerte = Alerte.builder()
                 .titre(titre)
                 .message(message)
                 .probabilite(score.getProbabilite())
                 .statut(EStatutAlerte.NON_LUE)
-                .emailDestinataire(destinataires)  // ⭐ MODIFIÉ
+                .emailDestinataire(null)   // ← null car destinataires commenté
                 .emailEnvoye(false)
                 .employee(employee)
                 .scoreRisque(score)
                 .build();
 
         Alerte saved = alerteRepository.save(alerte);
-
+/*
         // ─────────────────────────────────────
         // Appel au microservice de notification
         // ─────────────────────────────────────
@@ -141,6 +146,9 @@ public class AlerteService {
         } catch (Exception e) {
             System.err.println("❌ Erreur notification : " + e.getMessage());
         }
+
+
+*/
 
         return saved;
     }

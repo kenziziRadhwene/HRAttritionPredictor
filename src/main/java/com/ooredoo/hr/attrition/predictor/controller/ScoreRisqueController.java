@@ -1,5 +1,6 @@
 package com.ooredoo.hr.attrition.predictor.controller;
 
+import com.ooredoo.hr.attrition.predictor.dto.response.EvolutionMensuelleDTO;
 import com.ooredoo.hr.attrition.predictor.dto.response.ScoreRisqueResponse;
 import com.ooredoo.hr.attrition.predictor.entity.Employee;
 import com.ooredoo.hr.attrition.predictor.entity.ScoreRisque;
@@ -10,9 +11,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.Comparator;
-import java.util.List;
-import java.util.Objects;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @RestController
@@ -93,4 +92,59 @@ public class ScoreRisqueController {
                 .collect(Collectors.toList());
         return ResponseEntity.ok(result);
     }
+
+
+
+    // ─────────────────────────────────────────────────────
+// À AJOUTER dans ScoreRisqueController.java
+// Ajouter aussi cet import en haut du fichier :
+// import com.ooredoo.hr.attrition.predictor.dto.response.EvolutionMensuelleDTO;
+// ─────────────────────────────────────────────────────
+
+    // GET /api/scores/evolution-mensuelle
+    @GetMapping("/evolution-mensuelle")
+    public ResponseEntity<List<EvolutionMensuelleDTO>> getEvolutionMensuelle() {
+
+        List<Object[]> raw = scoreRisqueRepository.findEvolutionMensuelle();
+
+        // Regrouper par mois (année+mois)
+        Map<String, EvolutionMensuelleDTO> map = new LinkedHashMap<>();
+
+        for (Object[] row : raw) {
+            int annee  = ((Number) row[0]).intValue();
+            int mois   = ((Number) row[1]).intValue();
+            String niveau = row[2].toString();
+            long count = ((Number) row[3]).longValue();
+
+            String key = String.format("%04d-%02d", annee, mois);
+            String label = getMonthLabel(mois) + " " + annee;
+
+            map.computeIfAbsent(key, k -> EvolutionMensuelleDTO.builder()
+                    .mois(key)
+                    .moisLabel(label)
+                    .risqueEleve(0L)
+                    .risqueMoyen(0L)
+                    .build());
+
+            if ("ÉLEVÉ".equals(niveau)) {
+                map.get(key).setRisqueEleve(count);
+            } else if ("MOYEN".equals(niveau)) {
+                map.get(key).setRisqueMoyen(count);
+            }
+        }
+
+        return ResponseEntity.ok(new ArrayList<>(map.values()));
+    }
+
+    private String getMonthLabel(int mois) {
+        String[] labels = {"Jan","Fév","Mar","Avr","Mai","Jun",
+                "Jul","Aoû","Sep","Oct","Nov","Déc"};
+        return (mois >= 1 && mois <= 12) ? labels[mois - 1] : "?";
+    }
+
+// ─────────────────────────────────────────────────────
+// Imports à ajouter en haut de ScoreRisqueController.java :
+// import java.util.*;
+// import com.ooredoo.hr.attrition.predictor.dto.response.EvolutionMensuelleDTO;
+// ─────────────────────────────────────────────────────
 }

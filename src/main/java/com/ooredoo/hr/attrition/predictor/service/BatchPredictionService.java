@@ -1,8 +1,13 @@
 package com.ooredoo.hr.attrition.predictor.service;
 
+import com.ooredoo.hr.attrition.predictor.client.NotificationClient;           // ← AJOUT 1
+import com.ooredoo.hr.attrition.predictor.client.NotificationClient.EmployeeRiskPayload; // ← AJOUT 1
 import com.ooredoo.hr.attrition.predictor.dto.response.BatchPredictionResponse;
 import com.ooredoo.hr.attrition.predictor.entity.Employee;
+import com.ooredoo.hr.attrition.predictor.entity.ScoreRisque;                   // ← AJOUT 1
 import com.ooredoo.hr.attrition.predictor.repository.EmployeeRepository;
+import com.ooredoo.hr.attrition.predictor.repository.ScoreRisqueRepository;     // ← AJOUT 1
+import com.ooredoo.hr.attrition.predictor.enums.ENiveauRisque;                  // ← AJOUT 1
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -20,6 +25,8 @@ public class BatchPredictionService {
 
     private final EmployeeRepository employeeRepository;
     private final MLService mlService;
+    private final NotificationClient notificationClient;       // ← AJOUT 2
+    private final ScoreRisqueRepository scoreRisqueRepository; // ← AJOUT 2
 
     // Suivi de l'exécution
     private volatile boolean isRunning = false;
@@ -30,11 +37,9 @@ public class BatchPredictionService {
 
     /**
      * Lance la prédiction ML pour tous les employés actifs
-     * @return BatchPredictionResponse avec le rapport d'exécution
      */
     @Transactional
     public BatchPredictionResponse predictAllEmployees() {
-        // Vérifier si une exécution est déjà en cours
         if (isRunning) {
             log.warn("⚠️ Une prédiction batch est déjà en cours");
             return BatchPredictionResponse.builder()
@@ -61,17 +66,14 @@ public class BatchPredictionService {
             try {
                 mlService.predictAndSave(employee.getId());
                 success++;
-
                 if (success % 10 == 0) {
                     log.info("📊 Progression batch: {}/{} employés traités", success, total);
                 }
             } catch (Exception e) {
                 failed++;
                 errors.add(String.format("Employé ID %d (%s - %s %s): %s",
-                        employee.getId(),
-                        employee.getMatricule(),
-                        employee.getFirstName(),
-                        employee.getLastName(),
+                        employee.getId(), employee.getMatricule(),
+                        employee.getFirstName(), employee.getLastName(),
                         e.getMessage()));
                 log.error("❌ Erreur prédiction pour employé ID {}: {}", employee.getId(), e.getMessage());
             }
@@ -79,7 +81,6 @@ public class BatchPredictionService {
 
         long duration = System.currentTimeMillis() - startTime;
 
-        // Mettre à jour les statistiques
         lastExecutionTime = LocalDateTime.now();
         lastTotalEmployees = total;
         lastSuccessCount = success;
@@ -88,6 +89,12 @@ public class BatchPredictionService {
 
         log.info("✅ Prédiction batch terminée: {} succès, {} échecs, durée: {} ms",
                 success, failed, duration);
+
+        // ─────────────────────────────────────────────────────── AJOUT 3 ───
+        // Après le batch : envoyer le rapport PDF aux RH
+        // On filtre uniquement les employés avec niveauRisque = ÉLEVÉ
+        sendRiskReportToHR();
+        // ────────────────────────────────────────────────────────────────────
 
         return BatchPredictionResponse.builder()
                 .totalEmployees(total)
@@ -142,7 +149,7 @@ public class BatchPredictionService {
     /**
      * Programme automatique : Prédiction batch tous les jours à 02h00
      */
-    @Scheduled(cron = "0 0 2 * * ?")
+    @Scheduled(cron = "0 0 8 1 * ?")
     public void scheduledBatchPrediction() {
         log.info("⏰ === PRÉDICTION BATCH AUTOMATIQUE (programmée 02h00) ===");
         BatchPredictionResponse response = predictAllEmployees();
@@ -150,26 +157,55 @@ public class BatchPredictionService {
                 response.getSuccessCount(), response.getFailedCount());
     }
 
-    /**
-     * Retourne le statut de la dernière exécution
-     */
-    public boolean isRunning() {
-        return isRunning;
+    // ─────────────────────────────────────────────────────────────────────────
+    // NOUVELLE MÉTHODE — Récupère les scores ÉLEVÉ et appelle le Mailing Server
+    // ─────────────────────────────────────────────────────────────────────────
+    private void sendRiskReportToHR() {
+        try {
+            List<Employee> actifs = employeeRepository.findByActiveTrue();
+
+            List<EmployeeRiskPayload> highRiskEmployees = actifs.stream()
+                    .map(emp -> scoreRisqueRepository
+                            .findTopByEmployeeIdOrderByDateCalculDesc(emp.getId())
+                            .orElse(null))
+                    .filter(score -> score != null)
+                    .filter(score -> ENiveauRisque.ÉLEVÉ == score.getNiveauRisque())
+                    .map(score -> {
+                        Employee emp = score.getEmployee();
+                        return new EmployeeRiskPayload(
+                                emp.getId(),
+                                emp.getFirstName() + " " + emp.getLastName(),
+                                emp.getMatricule(),
+                                emp.getDepartment().name(),   // EDepartment → String
+                                emp.getJobRole().name(),       // EJobRole → String
+                                emp.getYearsAtCompany(),
+                                score.getProbabilite(),
+                                score.getNiveauRisque().name(),
+                                score.getDateCalcul().toString(),
+                                score.getModelVersion()
+                        );
+                    })
+                    .toList();
+
+            if (highRiskEmployees.isEmpty()) {
+                log.info("ℹ️ Aucun employé à risque élevé — aucun rapport envoyé");
+                return;
+            }
+
+            log.info("📨 Envoi du rapport PDF pour {} employés à risque élevé", highRiskEmployees.size());
+            notificationClient.sendRiskReport(highRiskEmployees);
+
+        } catch (Exception e) {
+            log.error("❌ Erreur lors de l'envoi du rapport RH : {}", e.getMessage());
+        }
     }
 
-    public LocalDateTime getLastExecutionTime() {
-        return lastExecutionTime;
-    }
-
-    public int getLastTotalEmployees() {
-        return lastTotalEmployees;
-    }
-
-    public int getLastSuccessCount() {
-        return lastSuccessCount;
-    }
-
-    public int getLastFailedCount() {
-        return lastFailedCount;
-    }
+    // ─────────────────────────────────────
+    // Getters pour le statut
+    // ─────────────────────────────────────
+    public boolean isRunning()                  { return isRunning; }
+    public LocalDateTime getLastExecutionTime() { return lastExecutionTime; }
+    public int getLastTotalEmployees()          { return lastTotalEmployees; }
+    public int getLastSuccessCount()            { return lastSuccessCount; }
+    public int getLastFailedCount()             { return lastFailedCount; }
 }
