@@ -16,11 +16,13 @@ class DBConnectionTest {
     private DataSource dataSource;
 
     @Test
-    void testDatabaseConnection() throws Exception {
-        try (Connection connection = dataSource.getConnection()) {
-            assertNotNull(connection);
-            assertFalse(connection.isClosed());
-            System.out.println("✅ Connexion réussie : " + connection.getMetaData().getURL());
-        }
+    void testDatabaseConnection() {
+        assertDoesNotThrow(() -> {
+            try (Connection connection = dataSource.getConnection()) {
+                assertNotNull(connection, "La connexion ne doit pas être null");
+                assertFalse(connection.isClosed(), "La connexion ne doit pas être fermée");
+                System.out.println("Connexion réussie : " + connection.getMetaData().getURL());
+            }
+        }, "Échec de connexion à la base de données PostgreSQL");
     }
 }

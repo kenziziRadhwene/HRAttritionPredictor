@@ -1,5 +1,6 @@
 package com.ooredoo.hr.attrition.predictor.client;
 
+import com.ooredoo.hr.attrition.predictor.enums.ERole;
 import com.ooredoo.hr.attrition.predictor.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -26,7 +27,7 @@ public class NotificationClient {
         String url = notificationServiceUrl + "/api/notifications/rapport-risque";
 
         // ← Récupérer les emails RH depuis la BDD
-        List<String> rhEmails = userRepository.findAllResponsableRHEmails();
+        List<String> rhEmails = userRepository.findAllResponsableRHEmails(ERole.RESPONSABLE_RH);
         log.info("📧 Emails RH trouvés : {}", rhEmails);
 
         if (rhEmails.isEmpty()) {

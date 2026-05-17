@@ -3,7 +3,7 @@ package com.ooredoo.hr.attrition.predictor.entity;
 import com.ooredoo.hr.attrition.predictor.enums.ERole;
 import jakarta.persistence.*;
 import lombok.*;
-
+import java.util.List;
 
 @Entity
 @Table(name = "users")
@@ -35,7 +35,9 @@ public class User {
     private ERole userRole;
 
     @Column
-    private String departement; // null pour ADMIN et RESPONSABLE_RH
+    private String departement;
 
-
+    //  Suppression en cascade des notifications
+    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<Notification> notifications;
 }

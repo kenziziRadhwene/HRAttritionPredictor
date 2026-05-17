@@ -4,6 +4,7 @@ import com.ooredoo.hr.attrition.predictor.dto.response.AlerteResponse;
 import com.ooredoo.hr.attrition.predictor.entity.Alerte;
 import com.ooredoo.hr.attrition.predictor.entity.Employee;
 import com.ooredoo.hr.attrition.predictor.entity.ScoreRisque;
+import com.ooredoo.hr.attrition.predictor.enums.ERole;
 import com.ooredoo.hr.attrition.predictor.enums.EStatutAlerte;
 import com.ooredoo.hr.attrition.predictor.repository.AlerteRepository;
 import com.ooredoo.hr.attrition.predictor.repository.UserRepository;
@@ -32,7 +33,7 @@ public class AlerteService {
      * Récupère la liste des emails de tous les responsables RH
      */
     private String getResponsablesRHEmails() {
-        List<String> emails = userRepository.findAllResponsableRHEmails();
+        List<String> emails = userRepository.findAllResponsableRHEmails(ERole.RESPONSABLE_RH);
 
         if (emails == null || emails.isEmpty()) {
             System.out.println("⚠️ Aucun RH trouvé, utilisation du fallback");

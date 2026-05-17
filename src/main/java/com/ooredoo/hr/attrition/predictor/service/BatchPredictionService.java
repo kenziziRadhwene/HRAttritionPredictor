@@ -26,7 +26,9 @@ public class BatchPredictionService {
     private final EmployeeRepository employeeRepository;
     private final MLService mlService;
     private final NotificationClient notificationClient;       // ← AJOUT 2
-    private final ScoreRisqueRepository scoreRisqueRepository; // ← AJOUT 2
+    private final NotificationPanneauService notificationPanneauService;
+    private final ScoreRisqueRepository      scoreRisqueRepository;
+
 
     // Suivi de l'exécution
     private volatile boolean isRunning = false;
@@ -93,6 +95,17 @@ public class BatchPredictionService {
         // ─────────────────────────────────────────────────────── AJOUT 3 ───
         // Après le batch : envoyer le rapport PDF aux RH
         // On filtre uniquement les employés avec niveauRisque = ÉLEVÉ
+// Créer les notifications pour tous les RH
+        LocalDateTime maintenant = LocalDateTime.now();
+        long critiquesCeMois = scoreRisqueRepository
+                .countByNiveauRisqueAndDateCalculAfter(ENiveauRisque.ÉLEVÉ, maintenant.minusMinutes(30));
+
+        notificationPanneauService.creerNotificationsApresBatch(
+                maintenant,
+                success,
+                critiquesCeMois
+        );
+
         sendRiskReportToHR();
         // ────────────────────────────────────────────────────────────────────
 

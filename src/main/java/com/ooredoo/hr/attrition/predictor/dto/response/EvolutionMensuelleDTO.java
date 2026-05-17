@@ -11,4 +11,5 @@ public class EvolutionMensuelleDTO {
     private String moisLabel;   // Format "Jan 2026"
     private Long risqueEleve;
     private Long risqueMoyen;
+    private Double tauxRisqueGlobal;
 }

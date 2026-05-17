@@ -16,11 +16,14 @@ public interface UserRepository extends JpaRepository<User, Long> {
     Optional<User> findByEmail(String email);
 
     boolean existsByEmail(String email);
-    @Query("SELECT u.email FROM User u WHERE u.userRole = 'RESPONSABLE_RH'")
-    List<String> findAllResponsableRHEmails();
+    @Query("SELECT u.email FROM User u WHERE u.userRole = :role")
+    List<String> findAllResponsableRHEmails(@Param("role") ERole role);
 
     @Query("SELECT u.email FROM User u WHERE u.userRole = 'MANAGER' AND u.departement = :departement")
     Optional<String> findManagerEmailByDepartement(@Param("departement") String departement);
+
+
+    List<User> findByUserRole(ERole userRole);
 
  
 }

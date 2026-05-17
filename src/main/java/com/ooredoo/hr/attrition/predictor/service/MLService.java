@@ -88,12 +88,12 @@ public class MLService {
                 .build();
 
         ScoreRisque saved = scoreRisqueRepository.save(score);
-
+/*
         // 8. Générer une alerte si risque MOYEN ou ÉLEVÉ
         if (niveauRisque == ENiveauRisque.MOYEN || niveauRisque == ENiveauRisque.ÉLEVÉ) {
             alerteService.createAlerte(employee, saved);
         }
-
+*/
         return saved;
     }
 

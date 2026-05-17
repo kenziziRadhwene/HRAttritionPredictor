@@ -20,6 +20,9 @@ public class DashboardStatsResponse {
     private Long risqueFaible;
     private Double tauxRisqueEleve;
 
+    // ─── NOUVEAU : Risque global de départ (moyenne des probabilités) ───
+    private Double risqueGlobalDepart;  // ex: 34.7 (%)
+
     // ─── Répartition par département (existant) ───
     private Map<String, Long> repartitionDepartement;
 

@@ -101,13 +101,27 @@ public class ScoreRisqueController {
 // import com.ooredoo.hr.attrition.predictor.dto.response.EvolutionMensuelleDTO;
 // ─────────────────────────────────────────────────────
 
-    // GET /api/scores/evolution-mensuelle
     @GetMapping("/evolution-mensuelle")
     public ResponseEntity<List<EvolutionMensuelleDTO>> getEvolutionMensuelle() {
 
+        // Données existantes : nb employés par niveau et par mois
         List<Object[]> raw = scoreRisqueRepository.findEvolutionMensuelle();
 
-        // Regrouper par mois (année+mois)
+        // NOUVEAU : taux de risque global moyen par mois
+        List<Object[]> rawTaux = scoreRisqueRepository.findTauxRisqueGlobalMensuel();
+
+        // Construire un map mois → taux moyen
+        Map<String, Double> tauxParMois = new LinkedHashMap<>();
+        for (Object[] row : rawTaux) {
+            int annee = ((Number) row[0]).intValue();
+            int mois  = ((Number) row[1]).intValue();
+            double avg = ((Number) row[2]).doubleValue();
+            String key = String.format("%04d-%02d", annee, mois);
+            // probabilite est entre 0 et 1, on convertit en %
+            tauxParMois.put(key, Math.round(avg * 100.0 * 10.0) / 10.0);
+        }
+
+        // Regrouper par mois (logique existante + ajout du taux)
         Map<String, EvolutionMensuelleDTO> map = new LinkedHashMap<>();
 
         for (Object[] row : raw) {
@@ -116,7 +130,7 @@ public class ScoreRisqueController {
             String niveau = row[2].toString();
             long count = ((Number) row[3]).longValue();
 
-            String key = String.format("%04d-%02d", annee, mois);
+            String key   = String.format("%04d-%02d", annee, mois);
             String label = getMonthLabel(mois) + " " + annee;
 
             map.computeIfAbsent(key, k -> EvolutionMensuelleDTO.builder()
@@ -124,6 +138,7 @@ public class ScoreRisqueController {
                     .moisLabel(label)
                     .risqueEleve(0L)
                     .risqueMoyen(0L)
+                    .tauxRisqueGlobal(tauxParMois.getOrDefault(key, 0.0)) // ← AJOUTÉ
                     .build());
 
             if ("ÉLEVÉ".equals(niveau)) {

@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -28,4 +29,21 @@ public interface ScoreRisqueRepository extends JpaRepository<ScoreRisque, Long> 
         ORDER BY YEAR(s.dateCalcul), MONTH(s.dateCalcul)
     """)
     List<Object[]> findEvolutionMensuelle();
+
+    long countByNiveauRisqueAndDateCalculAfter(ENiveauRisque niveauRisque, LocalDateTime date);
+
+
+    @Query("""
+    SELECT YEAR(s.dateCalcul), MONTH(s.dateCalcul), AVG(s.probabilite)
+    FROM ScoreRisque s
+    WHERE s.id IN (
+        SELECT MAX(s2.id) FROM ScoreRisque s2 GROUP BY s2.employee.id
+    )
+    GROUP BY YEAR(s.dateCalcul), MONTH(s.dateCalcul)
+    ORDER BY YEAR(s.dateCalcul), MONTH(s.dateCalcul)
+""")
+    List<Object[]> findTauxRisqueGlobalMensuel();
+
+
+
 }
