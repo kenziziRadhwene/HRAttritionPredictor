@@ -1,10 +1,7 @@
 package com.ooredoo.hr.attrition.predictor.entity;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.ooredoo.hr.attrition.predictor.enums.EDepartment;
-import com.ooredoo.hr.attrition.predictor.enums.EGender;
-import com.ooredoo.hr.attrition.predictor.enums.EJobRole;
-import com.ooredoo.hr.attrition.predictor.enums.EMaritalStatus;
+import com.ooredoo.hr.attrition.predictor.enums.*;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -144,6 +141,11 @@ public class Employee {
 
     @Column(nullable = false)
     private Integer trainingTimesLastYear;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = true)
+    private EStatutEmployee statut;
+
 
     // ─────────────────────────────────────
     // Métadonnées

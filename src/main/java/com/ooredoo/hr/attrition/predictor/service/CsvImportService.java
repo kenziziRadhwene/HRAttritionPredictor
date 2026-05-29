@@ -2,11 +2,17 @@ package com.ooredoo.hr.attrition.predictor.service;
 
 import com.ooredoo.hr.attrition.predictor.dto.response.ImportResultResponse;
 import com.ooredoo.hr.attrition.predictor.entity.Employee;
+import com.ooredoo.hr.attrition.predictor.entity.ImportSession;
+import com.ooredoo.hr.attrition.predictor.entity.User;
 import com.ooredoo.hr.attrition.predictor.enums.*;
 import com.ooredoo.hr.attrition.predictor.repository.EmployeeRepository;
+import com.ooredoo.hr.attrition.predictor.repository.ImportSessionRepository;
+import com.ooredoo.hr.attrition.predictor.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.csv.*;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -21,27 +27,26 @@ import java.util.*;
 public class CsvImportService {
 
     private final EmployeeRepository employeeRepository;
+    private final ImportSessionRepository importSessionRepository;
+    private final AuditLogService auditLogService;
+    private final UserRepository userRepository;
 
-    // Colonnes obligatoires
     private static final List<String> REQUIRED_COLUMNS = List.of(
             "EmployeeNumber", "Age", "Gender", "Department",
             "JobRole", "MonthlyIncome", "OverTime"
     );
-
-    // Seuil d'erreurs toléré (20%)
     private static final double ERROR_THRESHOLD = 0.20;
 
-    // ─────────────────────────────────────
-    // Point d'entrée principal
-    // ─────────────────────────────────────
     @Transactional
     public ImportResultResponse importEmployees(MultipartFile file) {
 
         List<String> erreurs = new ArrayList<>();
+        User currentUser = getCurrentUser();
 
-        // ── Niveau 1 : Validation fichier ──
         String fileError = validateFile(file);
         if (fileError != null) {
+            sauvegarderSession(currentUser, file, 0, 0, 0, 0, 1,
+                    true, EStatutImport.ERREUR_FICHIER, List.of(fileError));
             return ImportResultResponse.builder()
                     .totalLignes(0).crees(0).misAJour(0)
                     .ignores(0).erreurs(1)
@@ -59,10 +64,12 @@ public class CsvImportService {
                     .withTrim()
                     .parse(reader);
 
-            // ── Niveau 2 : Validation structure ──
             String structureError = validateStructure(
                     parser.getHeaderMap().keySet());
             if (structureError != null) {
+                sauvegarderSession(currentUser, file, 0, 0, 0, 0, 1,
+                        true, EStatutImport.ERREUR_FICHIER,
+                        List.of(structureError));
                 return ImportResultResponse.builder()
                         .totalLignes(0).crees(0).misAJour(0)
                         .ignores(0).erreurs(1)
@@ -71,7 +78,6 @@ public class CsvImportService {
                         .build();
             }
 
-            // ── Niveau 3 : Traitement ligne par ligne ──
             List<Employee> toSave = new ArrayList<>();
             int totalLignes = 0;
             int crees = 0, misAJour = 0;
@@ -79,35 +85,29 @@ public class CsvImportService {
             for (CSVRecord record : parser) {
                 totalLignes++;
                 try {
-                    // Valider et parser la ligne
                     Employee employee = parseLigne(record, totalLignes);
                     toSave.add(employee);
-
-                    // Compter créé ou mis à jour
-                    String matricule = "OO-" + getField(
-                            record, "EmployeeNumber",
+                    String matricule = "OO-" + getField(record, "EmployeeNumber",
                             String.valueOf(totalLignes));
                     if (employeeRepository.findByMatricule(matricule).isEmpty()) {
                         crees++;
                     } else {
                         misAJour++;
                     }
-
                 } catch (Exception e) {
                     erreurs.add("Ligne " + totalLignes + " : " + e.getMessage());
                     log.warn("Erreur ligne {} : {}", totalLignes, e.getMessage());
                 }
             }
 
-            // ── Niveau 4 : Vérifier le seuil d'erreurs ──
             if (totalLignes > 0) {
                 double tauxErreur = (double) erreurs.size() / totalLignes;
                 if (tauxErreur > ERROR_THRESHOLD) {
-                    // Trop d'erreurs → annuler tout
                     erreurs.add(0, String.format(
                             "❌ Import annulé : taux d'erreurs trop élevé (%.0f%% > 20%%)" +
-                                    " — Aucune donnée insérée.",
-                            tauxErreur * 100));
+                                    " — Aucune donnée insérée.", tauxErreur * 100));
+                    sauvegarderSession(currentUser, file, totalLignes, 0, 0, 0,
+                            erreurs.size(), true, EStatutImport.ANNULE, erreurs);
                     return ImportResultResponse.builder()
                             .totalLignes(totalLignes)
                             .crees(0).misAJour(0).ignores(0)
@@ -118,16 +118,28 @@ public class CsvImportService {
                 }
             }
 
-            // ── Niveau 5 : Sauvegarder ──
             employeeRepository.saveAll(toSave);
+            int ignores = Math.max(
+                    totalLignes - crees - misAJour - erreurs.size(), 0);
 
-            int ignores = totalLignes - crees - misAJour - erreurs.size();
+            ImportSession session = sauvegarderSession(currentUser, file,
+                    totalLignes, crees, misAJour, ignores,
+                    erreurs.size(), false, EStatutImport.SUCCES, erreurs);
+
+            auditLogService.log(
+                    EAuditAction.EMPLOYEE_IMPORT,
+                    "import_sessions",
+                    session.getId(),
+                    String.format(
+                            "{\"fichier\": \"%s\", \"crees\": %d, \"misAJour\": %d}",
+                            file.getOriginalFilename(), crees, misAJour)
+            );
 
             return ImportResultResponse.builder()
                     .totalLignes(totalLignes)
                     .crees(crees)
                     .misAJour(misAJour)
-                    .ignores(Math.max(ignores, 0))
+                    .ignores(ignores)
                     .erreurs(erreurs.size())
                     .detailsErreurs(erreurs)
                     .annule(false)
@@ -135,6 +147,9 @@ public class CsvImportService {
 
         } catch (Exception e) {
             log.error("Erreur import CSV : {}", e.getMessage());
+            sauvegarderSession(currentUser, file, 0, 0, 0, 0, 1,
+                    true, EStatutImport.ERREUR_FICHIER,
+                    List.of("Erreur lecture fichier : " + e.getMessage()));
             return ImportResultResponse.builder()
                     .totalLignes(0).crees(0).misAJour(0)
                     .ignores(0).erreurs(1)
@@ -145,26 +160,59 @@ public class CsvImportService {
         }
     }
 
-    // ─────────────────────────────────────
-    // Validation fichier
-    // ─────────────────────────────────────
+    private ImportSession sauvegarderSession(User user, MultipartFile file,
+                                             int totalLignes, int crees, int misAJour, int ignores,
+                                             int erreurs, boolean annule, EStatutImport statut,
+                                             List<String> detailsErreurs) {
+        try {
+            String details = detailsErreurs != null && !detailsErreurs.isEmpty()
+                    ? String.join("\n", detailsErreurs) : null;
+
+            ImportSession session = ImportSession.builder()
+                    .uploadedBy(user)
+                    .fichierNom(file.getOriginalFilename())
+                    .fichierTaille(file.getSize())
+                    .totalLignes(totalLignes)
+                    .nbCrees(crees)
+                    .nbMisAJour(misAJour)
+                    .nbIgnores(ignores)
+                    .nbErreurs(erreurs)
+                    .annule(annule)
+                    .statut(statut)
+                    .detailsErreurs(details)
+                    .build();
+
+            return importSessionRepository.save(session);
+        } catch (Exception e) {
+            log.error("❌ Erreur sauvegarde ImportSession: {}", e.getMessage());
+            return new ImportSession();
+        }
+    }
+
+    private User getCurrentUser() {
+        try {
+            Authentication auth = SecurityContextHolder
+                    .getContext().getAuthentication();
+            if (auth == null || !auth.isAuthenticated()
+                    || auth.getPrincipal().equals("anonymousUser")) {
+                return null;
+            }
+            return userRepository.findByEmail(auth.getName()).orElse(null);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     private String validateFile(MultipartFile file) {
-        if (file == null || file.isEmpty()) {
-            return "Le fichier est vide.";
-        }
+        if (file == null || file.isEmpty()) return "Le fichier est vide.";
         String filename = file.getOriginalFilename();
-        if (filename == null || !filename.toLowerCase().endsWith(".csv")) {
+        if (filename == null || !filename.toLowerCase().endsWith(".csv"))
             return "Format invalide. Seuls les fichiers .csv sont acceptés.";
-        }
-        if (file.getSize() > 10 * 1024 * 1024) {
+        if (file.getSize() > 10 * 1024 * 1024)
             return "Fichier trop volumineux. Taille maximale : 10 MB.";
-        }
         return null;
     }
 
-    // ─────────────────────────────────────
-    // Validation structure (colonnes)
-    // ─────────────────────────────────────
     private String validateStructure(Set<String> headers) {
         List<String> missing = new ArrayList<>();
         for (String col : REQUIRED_COLUMNS) {
@@ -172,57 +220,40 @@ public class CsvImportService {
                     .anyMatch(h -> h.equalsIgnoreCase(col));
             if (!found) missing.add(col);
         }
-        if (!missing.isEmpty()) {
-            return "Colonnes obligatoires manquantes : " +
-                    String.join(", ", missing);
-        }
+        if (!missing.isEmpty())
+            return "Colonnes obligatoires manquantes : "
+                    + String.join(", ", missing);
         return null;
     }
 
-    // ─────────────────────────────────────
-    // Parser une ligne CSV → Employee
-    // ─────────────────────────────────────
-    private Employee parseLigne(CSVRecord record, int numLigne)
-            throws Exception {
-
-        String employeeNumber = getField(
-                record, "EmployeeNumber", String.valueOf(numLigne));
+    private Employee parseLigne(CSVRecord record, int numLigne) throws Exception {
+        String employeeNumber = getField(record, "EmployeeNumber",
+                String.valueOf(numLigne));
         String matricule = "OO-" + employeeNumber;
 
-        // ── Validation Age ──
         int age = parseInt(record, "Age", 35);
-        if (age < 18 || age > 70) {
-            throw new Exception(
-                    "Age invalide (" + age + "). Doit être entre 18 et 70.");
-        }
+        if (age < 18 || age > 70)
+            throw new Exception("Age invalide (" + age
+                    + "). Doit être entre 18 et 70.");
 
-        // ── Validation Salaire ──
         int salaire = parseInt(record, "MonthlyIncome", 3000);
-        if (salaire < 0) {
-            throw new Exception(
-                    "Salaire invalide (" + salaire + "). Doit être positif.");
-        }
+        if (salaire < 0)
+            throw new Exception("Salaire invalide (" + salaire
+                    + "). Doit être positif.");
 
-        // ── Récupérer ou créer l'employé ──
-        Optional<Employee> existing =
-                employeeRepository.findByMatricule(matricule);
+        Optional<Employee> existing = employeeRepository.findByMatricule(matricule);
         Employee employee = existing.orElse(new Employee());
         boolean isNew = existing.isEmpty();
 
-        // ── Informations personnelles ──
         employee.setAge(age);
-        employee.setGender(
-                parseGender(getField(record, "Gender", "Male")));
+        employee.setGender(parseGender(getField(record, "Gender", "Male")));
         employee.setMaritalStatus(
                 parseMaritalStatus(getField(record, "MaritalStatus", "Single")));
         employee.setDistanceFromHome(
                 parseIntWithDefault(record, "DistanceFromHome", 5, 0, 100));
         employee.setEducation(
                 parseIntWithDefault(record, "Education", 3, 1, 5));
-        employee.setEducationField(
-                getField(record, "EducationField", "Other"));
-
-        // ── Informations professionnelles ──
+        employee.setEducationField(getField(record, "EducationField", "Other"));
         employee.setMatricule(matricule);
         employee.setDepartment(
                 parseDepartment(getField(record, "Department", "Sales")));
@@ -233,21 +264,17 @@ public class CsvImportService {
         employee.setBusinessTravel(
                 getField(record, "BusinessTravel", "Travel_Rarely"));
 
-        // ── Champs générés si nouvel employé ──
         if (isNew) {
             String firstName = getField(record, "FirstName", "");
             String lastName  = getField(record, "LastName", "");
             String email     = getField(record, "Email", "");
-
             if (firstName.isBlank()) firstName = "Employe";
             if (lastName.isBlank())  lastName  = employeeNumber;
-
             employee.setFirstName(firstName);
             employee.setLastName(lastName);
             employee.setEmail(email);
         }
 
-        // ── Rémunération ──
         employee.setMonthlyIncome(salaire);
         employee.setDailyRate(
                 parseIntWithDefault(record, "DailyRate", 500, 0, 10000));
@@ -259,8 +286,6 @@ public class CsvImportService {
                 parseIntWithDefault(record, "PercentSalaryHike", 10, 0, 100));
         employee.setStockOptionLevel(
                 parseIntWithDefault(record, "StockOptionLevel", 0, 0, 3));
-
-        // ── Satisfaction (échelle 1-4) ──
         employee.setJobSatisfaction(
                 parseIntWithDefault(record, "JobSatisfaction", 3, 1, 4));
         employee.setEnvironmentSatisfaction(
@@ -273,8 +298,6 @@ public class CsvImportService {
                 parseIntWithDefault(record, "WorkLifeBalance", 3, 1, 4));
         employee.setPerformanceRating(
                 parseIntWithDefault(record, "PerformanceRating", 3, 1, 4));
-
-        // ── Activité ──
         employee.setOverTime(
                 parseBoolean(getField(record, "OverTime", "No")));
         employee.setNumCompaniesWorked(
@@ -292,39 +315,33 @@ public class CsvImportService {
         employee.setTrainingTimesLastYear(
                 parseIntWithDefault(record, "TrainingTimesLastYear", 2, 0, 10));
 
-        employee.setActive(true);
+        // ✅ Lecture du statut depuis le CSV (ACTIVE par défaut si absent)
+        EStatutEmployee statut = parseStatut(getField(record, "status", "ACTIVE"));
+        employee.setStatut(statut);
+        employee.setActive(EStatutEmployee.ACTIVE.equals(statut));
 
         return employee;
     }
 
-    // ─────────────────────────────────────
-    // Helpers
-    // ─────────────────────────────────────
-    private String getField(CSVRecord record, String field,
-                            String defaultVal) {
+    private String getField(CSVRecord record, String field, String defaultVal) {
         try {
             String val = record.get(field);
             return (val == null || val.isBlank()) ? defaultVal : val.trim();
-        } catch (Exception e) {
-            return defaultVal;
-        }
+        } catch (Exception e) { return defaultVal; }
     }
 
     private int parseInt(CSVRecord record, String field, int defaultVal) {
         try {
-            String val = getField(record, field, String.valueOf(defaultVal));
-            return Integer.parseInt(val);
-        } catch (Exception e) {
-            return defaultVal;
-        }
+            return Integer.parseInt(getField(record, field,
+                    String.valueOf(defaultVal)));
+        } catch (Exception e) { return defaultVal; }
     }
 
     private int parseIntWithDefault(CSVRecord record, String field,
                                     int defaultVal, int min, int max) {
         int val = parseInt(record, field, defaultVal);
-        // Si hors limites → valeur par défaut
         if (val < min || val > max) {
-            log.warn("Valeur hors limites pour {} : {} → utilisation défaut {}",
+            log.warn("Valeur hors limites pour {} : {} → défaut {}",
                     field, val, defaultVal);
             return defaultVal;
         }
@@ -336,8 +353,7 @@ public class CsvImportService {
     }
 
     private EGender parseGender(String val) {
-        return "Female".equalsIgnoreCase(val)
-                ? EGender.Female : EGender.Male;
+        return "Female".equalsIgnoreCase(val) ? EGender.Female : EGender.Male;
     }
 
     private EMaritalStatus parseMaritalStatus(String val) {
@@ -348,16 +364,22 @@ public class CsvImportService {
         };
     }
 
+    // ✅ Nouvelle méthode — parse le statut de l'employé
+    private EStatutEmployee parseStatut(String val) {
+        return "TERMINATED".equalsIgnoreCase(val)
+                ? EStatutEmployee.TERMINATED
+                : EStatutEmployee.ACTIVE;
+    }
+
     private EDepartment parseDepartment(String val) {
         return switch (val) {
-            case "DIRECTION_GENERALE"                    -> EDepartment.DIRECTION_GENERALE;
-            case "DIRECTION_RESSOURCES_HUMAINES"         -> EDepartment.DIRECTION_RESSOURCES_HUMAINES;
-            case "DIRECTION_ADMINISTRATIVE_FINANCIERE"   -> EDepartment.DIRECTION_ADMINISTRATIVE_FINANCIERE;
-            case "DIRECTION_JURIDIQUE"                   -> EDepartment.DIRECTION_JURIDIQUE;
-            case "DIRECTION_TECHNOLOGIQUE"               -> EDepartment.DIRECTION_TECHNOLOGIQUE;
-            case "DIRECTION_RELATIONS_OPERATEURS"        -> EDepartment.DIRECTION_RELATIONS_OPERATEURS;
-            case "DIRECTION_SERVICE_CLIENT"              -> EDepartment.DIRECTION_SERVICE_CLIENT;
-            default                                      -> EDepartment.DIRECTION_SERVICE_CLIENT;
+            case "DIRECTION_GENERALE"                  -> EDepartment.DIRECTION_GENERALE;
+            case "DIRECTION_RESSOURCES_HUMAINES"       -> EDepartment.DIRECTION_RESSOURCES_HUMAINES;
+            case "DIRECTION_ADMINISTRATIVE_FINANCIERE" -> EDepartment.DIRECTION_ADMINISTRATIVE_FINANCIERE;
+            case "DIRECTION_JURIDIQUE"                 -> EDepartment.DIRECTION_JURIDIQUE;
+            case "DIRECTION_TECHNOLOGIQUE"             -> EDepartment.DIRECTION_TECHNOLOGIQUE;
+            case "DIRECTION_RELATIONS_OPERATEURS"      -> EDepartment.DIRECTION_RELATIONS_OPERATEURS;
+            default                                    -> EDepartment.DIRECTION_SERVICE_CLIENT;
         };
     }
 

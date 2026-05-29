@@ -56,22 +56,15 @@ public class DashboardService {
     // ─────────────────────────────────────
     public DashboardStatsResponse getStats() {
 
-        List<Employee> tousEmployes = employeeRepository.findAll();
-        List<Employee> actifs       = employeeRepository.findByActiveTrue();
-        Long totalEmployes = (long) tousEmployes.size();
-        Long totalActifs   = (long) actifs.size();
+        List<Employee> actifs  = employeeRepository.findByActiveTrue();
+        Long totalActifs       = (long) actifs.size();
+        Long totalEmployes     = (long) employeeRepository.count();
+        Long totalAlertes      = alerteRepository.count();
+        Long alertesNonLues    = (long) alerteRepository.findByStatut(EStatutAlerte.NON_LUE).size();
+        Long totalPredictions  = scoreRisqueRepository.count();
 
-        Long totalAlertes   = (long) alerteRepository.findAll().size();
-        Long alertesNonLues = (long) alerteRepository.findByStatut(EStatutAlerte.NON_LUE).size();
-
-        List<ScoreRisque> derniersScores = actifs.stream()
-                .map(e -> scoreRisqueRepository
-                        .findTopByEmployeeIdOrderByDateCalculDesc(e.getId())
-                        .orElse(null))
-                .filter(Objects::nonNull)
-                .collect(Collectors.toList());
-
-        Long totalPredictions = (long) scoreRisqueRepository.findAll().size();
+        // ✅ Une seule requête au lieu de 1056 !
+        List<ScoreRisque> derniersScores = scoreRisqueRepository.findDerniersScoresEmployesActifs();
 
         Long risqueEleve  = derniersScores.stream().filter(s -> s.getNiveauRisque() == ENiveauRisque.ÉLEVÉ).count();
         Long risqueMoyen  = derniersScores.stream().filter(s -> s.getNiveauRisque() == ENiveauRisque.MOYEN).count();
@@ -80,13 +73,12 @@ public class DashboardService {
         Double tauxRisqueEleve = derniersScores.isEmpty() ? 0.0 :
                 (risqueEleve * 100.0) / derniersScores.size();
 
-        // ── NOUVEAU : Risque global de départ ──
         Double risqueGlobalDepart = derniersScores.isEmpty() ? 0.0 :
                 Math.round(
                         derniersScores.stream()
-                        .mapToDouble(ScoreRisque::getProbabilite)
-                        .average()
-                        .orElse(0.0) * 100.0 * 10.0
+                                .mapToDouble(ScoreRisque::getProbabilite)
+                                .average()
+                                .orElse(0.0) * 100.0 * 10.0
                 ) / 10.0;
 
         Map<String, Long> repartitionDepartement = actifs.stream()
@@ -113,7 +105,7 @@ public class DashboardService {
                 .risqueMoyen(risqueMoyen)
                 .risqueFaible(risqueFaible)
                 .tauxRisqueEleve(tauxRisqueEleve)
-                .risqueGlobalDepart(risqueGlobalDepart)          // ← AJOUTÉ
+                .risqueGlobalDepart(risqueGlobalDepart)
                 .repartitionDepartement(repartitionDepartement)
                 .repartitionRisqueParDepartement(repartitionRisqueParDept)
                 .tauxTurnoverParDepartement(tauxTurnoverParDept)
@@ -138,12 +130,18 @@ public class DashboardService {
             } catch (IllegalArgumentException ignored) {}
         }
 
-        List<ScoreRisque> derniersScores = actifs.stream()
-                .map(e -> scoreRisqueRepository
-                        .findTopByEmployeeIdOrderByDateCalculDesc(e.getId())
-                        .orElse(null))
-                .filter(Objects::nonNull)
-                .collect(Collectors.toList());
+        // ✅ Une seule requête au lieu de N requêtes !
+        List<ScoreRisque> derniersScores = scoreRisqueRepository.findDerniersScoresEmployesActifs();
+
+        // Filtre par département si nécessaire
+        if (departement != null && !departement.isEmpty()) {
+            try {
+                EDepartment dept = EDepartment.valueOf(departement);
+                derniersScores = derniersScores.stream()
+                        .filter(s -> s.getEmployee().getDepartment() == dept)
+                        .collect(Collectors.toList());
+            } catch (IllegalArgumentException ignored) {}
+        }
 
         if (niveauRisque != null && !niveauRisque.isEmpty()) {
             try {
@@ -163,13 +161,12 @@ public class DashboardService {
         Double tauxRisqueEleve = scoresFiltres.isEmpty() ? 0.0 :
                 (risqueEleve * 100.0) / scoresFiltres.size();
 
-        // ── NOUVEAU : Risque global de départ ──
         Double risqueGlobalDepart = scoresFiltres.isEmpty() ? 0.0 :
                 Math.round(
                         scoresFiltres.stream()
-                        .mapToDouble(ScoreRisque::getProbabilite)
-                        .average()
-                        .orElse(0.0) * 100.0 * 10.0
+                                .mapToDouble(ScoreRisque::getProbabilite)
+                                .average()
+                                .orElse(0.0) * 100.0 * 10.0
                 ) / 10.0;
 
         Map<String, Long> repartitionDepartement = actifs.stream()
@@ -185,16 +182,16 @@ public class DashboardService {
                 buildTopFacteurs(scoresFiltres);
 
         return DashboardStatsResponse.builder()
-                .totalEmployes((long) employeeRepository.findAll().size())
+                .totalEmployes(employeeRepository.count())
                 .totalActifs((long) actifs.size())
-                .totalAlertes((long) alerteRepository.findAll().size())
+                .totalAlertes(alerteRepository.count())
                 .alertesNonLues((long) alerteRepository.findByStatut(EStatutAlerte.NON_LUE).size())
-                .totalPredictions((long) scoreRisqueRepository.findAll().size())
+                .totalPredictions(scoreRisqueRepository.count())
                 .risqueEleve(risqueEleve)
                 .risqueMoyen(risqueMoyen)
                 .risqueFaible(risqueFaible)
                 .tauxRisqueEleve(tauxRisqueEleve)
-                .risqueGlobalDepart(risqueGlobalDepart)          // ← AJOUTÉ
+                .risqueGlobalDepart(risqueGlobalDepart)
                 .repartitionDepartement(repartitionDepartement)
                 .repartitionRisqueParDepartement(repartitionRisqueParDept)
                 .tauxTurnoverParDepartement(tauxTurnoverParDept)

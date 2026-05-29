@@ -5,12 +5,14 @@ import com.ooredoo.hr.attrition.predictor.dto.response.EmployeeResponse;
 import com.ooredoo.hr.attrition.predictor.entity.Employee;
 import com.ooredoo.hr.attrition.predictor.entity.ScoreRisque;
 import com.ooredoo.hr.attrition.predictor.enums.EDepartment;
+import com.ooredoo.hr.attrition.predictor.enums.EAuditAction;
 import com.ooredoo.hr.attrition.predictor.repository.EmployeeRepository;
 import com.ooredoo.hr.attrition.predictor.repository.ScoreRisqueRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
@@ -19,10 +21,8 @@ public class EmployeeService {
 
     private final EmployeeRepository employeeRepository;
     private final ScoreRisqueRepository scoreRisqueRepository;
+    private final AuditLogService auditLogService;
 
-    // ─────────────────────────────────────
-    // Créer un employé
-    // ─────────────────────────────────────
     public EmployeeResponse createEmployee(EmployeeRequest request) {
 
         if (employeeRepository.existsByEmail(request.getEmail()))
@@ -70,34 +70,45 @@ public class EmployeeService {
                 .build();
 
         Employee saved = employeeRepository.save(employee);
+
+        auditLogService.log(
+                EAuditAction.EMPLOYEE_CREATE,
+                "employees",
+                saved.getId(),
+                "{\"matricule\": \"" + saved.getMatricule() + "\", \"nom\": \""
+                        + saved.getFirstName() + " " + saved.getLastName() + "\"}"
+        );
+
         return toResponse(saved);
     }
 
-    // ─────────────────────────────────────
-    // Récupérer tous les employés actifs
-    // ─────────────────────────────────────
     public List<EmployeeResponse> getAllEmployees() {
-        return employeeRepository.findByActiveTrue()
+        List<Employee> actifs = employeeRepository.findByActiveTrue();
+
+        Map<Long, ScoreRisque> derniersScores = scoreRisqueRepository
+                .findDerniersScoresEmployesActifs()
                 .stream()
-                .map(this::toResponse)
+                .collect(Collectors.toMap(
+                        s -> s.getEmployee().getId(),
+                        s -> s
+                ));
+
+        return actifs.stream()
+                .map(e -> toResponseWithScore(e, derniersScores.get(e.getId())))
                 .collect(Collectors.toList());
     }
 
-    // ─────────────────────────────────────
-    // Récupérer un employé par ID
-    // ─────────────────────────────────────
     public EmployeeResponse getEmployeeById(Long id) {
         Employee employee = employeeRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Employé non trouvé avec l'ID : " + id));
+                .orElseThrow(() -> new RuntimeException(
+                        "Employé non trouvé avec l'ID : " + id));
         return toResponse(employee);
     }
 
-    // ─────────────────────────────────────
-    // Mettre à jour un employé
-    // ─────────────────────────────────────
     public EmployeeResponse updateEmployee(Long id, EmployeeRequest request) {
         Employee employee = employeeRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Employé non trouvé avec l'ID : " + id));
+                .orElseThrow(() -> new RuntimeException(
+                        "Employé non trouvé avec l'ID : " + id));
 
         employee.setFirstName(request.getFirstName());
         employee.setLastName(request.getLastName());
@@ -133,44 +144,57 @@ public class EmployeeService {
         employee.setTrainingTimesLastYear(request.getTrainingTimesLastYear());
 
         Employee updated = employeeRepository.save(employee);
+
+        auditLogService.log(
+                EAuditAction.EMPLOYEE_UPDATE,
+                "employees",
+                updated.getId(),
+                "{\"matricule\": \"" + updated.getMatricule() + "\"}"
+        );
+
         return toResponse(updated);
     }
 
-    // ─────────────────────────────────────
-    // Désactiver un employé (soft delete)
-    // ─────────────────────────────────────
     public void deleteEmployee(Long id) {
         Employee employee = employeeRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Employé non trouvé avec l'ID : " + id));
+                .orElseThrow(() -> new RuntimeException(
+                        "Employé non trouvé avec l'ID : " + id));
         employee.setActive(false);
         employeeRepository.save(employee);
+
+        auditLogService.log(
+                EAuditAction.EMPLOYEE_DELETE,
+                "employees",
+                id,
+                "{\"matricule\": \"" + employee.getMatricule() + "\"}"
+        );
     }
 
-    // ─────────────────────────────────────
-// US8 — Employés par département (Manager)
-// ─────────────────────────────────────
     public List<EmployeeResponse> getEmployeesByDepartment(String department) {
         try {
             EDepartment dept = EDepartment.valueOf(department.toUpperCase());
-            return employeeRepository.findByActiveTrueAndDepartment(dept)
+            List<Employee> employes = employeeRepository
+                    .findByActiveTrueAndDepartment(dept);
+
+            Map<Long, ScoreRisque> derniersScores = scoreRisqueRepository
+                    .findDerniersScoresEmployesActifs()
                     .stream()
-                    .map(this::toResponse)
+                    .collect(Collectors.toMap(
+                            s -> s.getEmployee().getId(),
+                            s -> s
+                    ));
+
+            return employes.stream()
+                    .map(e -> toResponseWithScore(e, derniersScores.get(e.getId())))
                     .collect(Collectors.toList());
+
         } catch (IllegalArgumentException e) {
             throw new RuntimeException("Département invalide : " + department);
         }
     }
 
-    // ─────────────────────────────────────
-    // Mapper Entity → DTO
-    // ─────────────────────────────────────
-    public EmployeeResponse toResponse(Employee employee) {
-
-        // Récupérer le dernier score de risque si disponible
-        ScoreRisque dernierScore = scoreRisqueRepository
-                .findTopByEmployeeIdOrderByDateCalculDesc(employee.getId())
-                .orElse(null);
-
+    public EmployeeResponse toResponseWithScore(Employee employee,
+                                                ScoreRisque dernierScore) {
         return EmployeeResponse.builder()
                 .id(employee.getId())
                 .firstName(employee.getFirstName())
@@ -209,9 +233,19 @@ public class EmployeeService {
                 .yearsWithCurrManager(employee.getYearsWithCurrManager())
                 .trainingTimesLastYear(employee.getTrainingTimesLastYear())
                 .createdAt(employee.getCreatedAt())
-                .derniereProbabilite(dernierScore != null ? dernierScore.getProbabilite() : null)
-                .dernierNiveauRisque(dernierScore != null ? dernierScore.getNiveauRisque().name() : null)
-                .derniereDateCalcul(dernierScore != null ? dernierScore.getDateCalcul() : null)
+                .derniereProbabilite(dernierScore != null
+                        ? dernierScore.getProbabilite() : null)
+                .dernierNiveauRisque(dernierScore != null
+                        ? dernierScore.getNiveauRisque().name() : null)
+                .derniereDateCalcul(dernierScore != null
+                        ? dernierScore.getDateCalcul() : null)
                 .build();
+    }
+
+    public EmployeeResponse toResponse(Employee employee) {
+        ScoreRisque dernierScore = scoreRisqueRepository
+                .findTopByEmployeeIdOrderByDateCalculDesc(employee.getId())
+                .orElse(null);
+        return toResponseWithScore(employee, dernierScore);
     }
 }

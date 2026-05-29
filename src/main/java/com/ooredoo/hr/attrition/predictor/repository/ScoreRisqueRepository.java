@@ -45,5 +45,9 @@ public interface ScoreRisqueRepository extends JpaRepository<ScoreRisque, Long> 
     List<Object[]> findTauxRisqueGlobalMensuel();
 
 
+    @Query("SELECT s FROM ScoreRisque s WHERE s.dateCalcul = " +
+            "(SELECT MAX(s2.dateCalcul) FROM ScoreRisque s2 WHERE s2.employee.id = s.employee.id) " +
+            "AND s.employee.active = true")
+    List<ScoreRisque> findDerniersScoresEmployesActifs();
 
 }
